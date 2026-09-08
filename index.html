@@ -1,13 +1,1238 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Smart City 3D</title>
-  </head>
-  <body>
+    <title>🏙️ 3D Smart City</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            overflow: hidden;
+            background: #0a0a1a;
+            font-family: Arial, sans-serif;
+        }
+        #root {
+            width: 100vw;
+            height: 100vh;
+        }
+        /* Loading Screen */
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #0a0a1a, #1a1a3e);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            color: white;
+        }
+        #loading .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top: 4px solid #00ff88;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        #loading h1 {
+            font-size: 28px;
+            background: linear-gradient(135deg, #00ff88, #00cc66);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        #loading p {
+            color: #94a3b8;
+            margin-top: 10px;
+        }
+        .loading-bar {
+            width: 300px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            margin-top: 20px;
+            overflow: hidden;
+        }
+        .loading-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #00ff88, #00cc66);
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+
+        /* Controls Info */
+        #info {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 14px;
+            z-index: 100;
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            text-align: center;
+            pointer-events: none;
+        }
+        #info span {
+            color: #00ff88;
+            font-weight: bold;
+        }
+        #info .keys {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 4px;
+        }
+        #info .key {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Loading Screen -->
+    <div id="loading">
+        <div class="spinner"></div>
+        <h1>🏙️ Smart City Pro</h1>
+        <p>Building your future city...</p>
+        <div class="loading-bar">
+            <div class="loading-fill" id="loadingFill"></div>
+        </div>
+    </div>
+
+    <!-- Info -->
+    <div id="info">
+        🖱️ <span>Drag</span> to rotate · <span>Scroll</span> to zoom · Click buildings for details
+        <div class="keys">
+            <span class="key">🏥 Hospital</span>
+            <span class="key">🏫 School</span>
+            <span class="key">💧 Water Plant</span>
+            <span class="key">🌿 Garden</span>
+        </div>
+    </div>
+
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+
+    <!-- Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js">
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js">
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js">
+    </script>
+
+    <!-- Main App -->
+    <script>
+        // ============================================
+        // COMPLETE SMART CITY - All in One
+        // ============================================
+
+        // --- Zustand Store (State Management) ---
+        const { create } = window.Zustand || { create: (fn) => fn() };
+
+        // Simple state management
+        const useStore = (() => {
+            let state = {
+                alert: null,
+                focus: null,
+                timeOfDay: 'day',
+                streetLightsOn: false,
+                wasteBins: {},
+                alertWasteManagement: false,
+                collectedWaste: 0,
+                gardenSensors: {
+                    soilMoisture: 65,
+                    temperature: 24,
+                    humidity: 45,
+                    waterLevel: 80,
+                    isWatering: false
+                },
+                waterPlant: {
+                    isProcessing: false,
+                    processTime: 0,
+                    waterQuality: 95,
+                    filteredWater: 0,
+                    efficiency: 85
+                }
+            };
+
+            const listeners = [];
+
+            const setState = (newState) => {
+                state = { ...state, ...newState };
+                listeners.forEach(fn => fn(state));
+            };
+
+            const subscribe = (fn) => {
+                listeners.push(fn);
+                return () => {
+                    const idx = listeners.indexOf(fn);
+                    if (idx > -1) listeners.splice(idx, 1);
+                };
+            };
+
+            const getState = () => state;
+
+            return {
+                getState,
+                setState,
+                subscribe,
+                // Individual getters for compatibility
+                get: (selector) => selector(state),
+                set: (fn) => {
+                    const newState = fn(state);
+                    setState(newState);
+                }
+            };
+        })();
+
+        // React and Three.js
+        const React = window.React;
+        const ReactDOM = window.ReactDOM;
+        const THREE = window.THREE;
+
+        // --- React Three Fiber Setup ---
+        const { Canvas, useFrame, useThree } = window['@react-three/fiber'] || {};
+        const { OrbitControls, Html, useGLTF, ContactShadows, Sky, Text, Sparkles, Float, useTexture } = window[
+        '@react-three/drei'] || {};
+
+        // Fallback if libraries not loaded
+        if (!Canvas) {
+            document.getElementById('loading').innerHTML = `
+                    <h1 style="color:red;">⚠️ Error</h1>
+                    <p style="color:white;">Libraries not loaded. Please check internet connection.</p>
+                    <p style="color:#94a3b8;font-size:14px;">Make sure you have internet access to load CDN resources.</p>
+                `;
+            throw new Error('Required libraries not loaded');
+        }
+
+        // ============================================
+        // COMPONENTS
+        // ============================================
+
+        // --- Solar Panel ---
+        function SolarPanel({ position = [0, 0, 0], rotation = [0, 0, 0] }) {
+            return React.createElement('group', { position, rotation },
+                React.createElement('mesh', { castShadow: true, receiveShadow: true },
+                    React.createElement('boxGeometry', { args: [2, 0.1, 1.5] }),
+                    React.createElement('meshStandardMaterial', { color: '#3366cc', metalness: 0.6, roughness: 0.2 })
+                ),
+                React.createElement('mesh', { position: [0, 0.06, 0] },
+                    React.createElement('boxGeometry', { args: [2, 0.02, 1.5] }),
+                    React.createElement('meshStandardMaterial', { color: '#4488ff', metalness: 0.8, roughness: 0.1 })
+                )
+            );
+        }
+
+        // --- Wind Turbine ---
+        function WindTurbine({ position = [0, 0, 0] }) {
+            const bladeRef = React.useRef();
+            useFrame((_, delta) => {
+                if (bladeRef.current) {
+                    bladeRef.current.rotation.y += delta * 2;
+                }
+            });
+
+            return React.createElement('group', { position },
+                React.createElement('mesh', { position: [0, 5, 0], castShadow: true },
+                    React.createElement('cylinderGeometry', { args: [0.1, 0.15, 10, 8] }),
+                    React.createElement('meshStandardMaterial', { color: '#cccccc', metalness: 0.5 })
+                ),
+                React.createElement('mesh', { position: [0, 10, 0], castShadow: true },
+                    React.createElement('boxGeometry', { args: [0.5, 0.2, 0.5] }),
+                    React.createElement('meshStandardMaterial', { color: '#999999', metalness: 0.7 })
+                ),
+                React.createElement('group', { ref: bladeRef },
+                    [0, 120, 240].map((angle) =>
+                        React.createElement('mesh', { key: angle, position: [0, 10, 0], rotation: [0, 0, angle * Math.PI /
+                                180] },
+                            React.createElement('mesh', { position: [4, 0, 0], castShadow: true },
+                                React.createElement('boxGeometry', { args: [8, 0.4, 0.5] }),
+                                React.createElement('meshStandardMaterial', { color: '#dddddd', metalness: 0.4,
+                                    roughness: 0.6 })
+                            )
+                        )
+                    )
+                ),
+                React.createElement('mesh', { position: [0, 10.3, 0], castShadow: true },
+                    React.createElement('sphereGeometry', { args: [0.3, 8, 8] }),
+                    React.createElement('meshStandardMaterial', { color: '#aaaaaa', metalness: 0.8 })
+                )
+            );
+        }
+
+        // --- Enhanced Building ---
+        function EnhancedBuilding({ position = [0, 0, 0], height = 12, color = '#4a6572', name = 'Building',
+            hasTurbine = false, hasSolar = true, windows = true }) {
+            const setFocus = useStore.get('setFocus');
+            const timeOfDay = useStore.get('timeOfDay');
+
+            const handleClick = () => {
+                if (setFocus) {
+                    setFocus({
+                        x: position[0],
+                        y: position[1] + height / 2,
+                        z: position[2],
+                        lookAt: { x: position[0], y: position[1], z: position[2] }
+                    });
+                }
+            };
+
+            const isNight = timeOfDay === 'night';
+
+            return React.createElement('group', { position },
+                // Main Building
+                React.createElement('mesh', { castShadow: true, receiveShadow: true, onClick: handleClick },
+                    React.createElement('boxGeometry', { args: [5, height, 5] }),
+                    React.createElement('meshStandardMaterial', { color, roughness: 0.6, metalness: 0.2 })
+                ),
+                // Top trim
+                React.createElement('mesh', { position: [0, height / 2 + 0.3, 0], castShadow: true },
+                    React.createElement('boxGeometry', { args: [5.4, 0.6, 5.4] }),
+                    React.createElement('meshStandardMaterial', { color: '#34495e' })
+                ),
+                // Windows
+                windows && Array.from({ length: Math.floor(height / 3) }).map((_, floor) =>
+                    [-1.5, 0, 1.5].map((side) =>
+                        React.createElement('group', { key: `${floor}-${side}` },
+                            React.createElement('mesh', { position: [2.51, (floor * 3) - height / 2 + 3, side * 1.2],
+                                    castShadow: true },
+                                React.createElement('boxGeometry', { args: [0.02, 2, 1] }),
+                                React.createElement('meshStandardMaterial', {
+                                    color: isNight ? '#ffffcc' : '#87CEEB',
+                                    transparent: true,
+                                    opacity: isNight ? 0.9 : 0.7,
+                                    emissive: isNight ? '#ffff99' : '#000000',
+                                    emissiveIntensity: isNight ? 0.5 : 0
+                                })
+                            )
+                        )
+                    )
+                ),
+                // Solar Panels
+                hasSolar && React.createElement('group', { position: [0, height / 2 + 0.8, 0] },
+                    React.createElement(SolarPanel, { position: [0, 0, 0], rotation: [0, 0, 0] }),
+                    React.createElement(SolarPanel, { position: [2.2, 0, 1.5], rotation: [0, Math.PI / 4, 0] }),
+                    React.createElement(SolarPanel, { position: [-2.2, 0, 1.5], rotation: [0, -Math.PI / 4, 0] })
+                ),
+                // Wind Turbine
+                hasTurbine && React.createElement(WindTurbine, { position: [0, height / 2, 0] }),
+                // Label
+                React.createElement(Text, {
+                    position: [0, height / 2 + 2, 0],
+                    fontSize: 0.3,
+                    color: '#ffffff',
+                    anchorX: 'center',
+                    anchorY: 'middle'
+                }, name)
+            );
+        }
+
+        // --- Waste Bin ---
+        function WasteBin({ position = [0, 0, 0], id = 'bin1' }) {
+            const wasteBins = useStore.get('wasteBins');
+            const updateWasteBin = useStore.get('updateWasteBin');
+            const setAlertWasteManagement = useStore.get('setAlertWasteManagement');
+            const setCollectedWaste = useStore.get('setCollectedWaste');
+            const alertWasteManagement = useStore.get('alertWasteManagement');
+            const collectedWaste = useStore.get('collectedWaste');
+            const timeOfDay = useStore.get('timeOfDay');
+
+            const wasteLevel = (wasteBins && wasteBins[id]) || 20;
+
+            React.useEffect(() => {
+                const interval = setInterval(() => {
+                    if (wasteLevel < 100) {
+                        const newLevel = Math.min(100, wasteLevel + Math.random() * 2);
+                        if (updateWasteBin) updateWasteBin(id, newLevel);
+                        if (newLevel > 80 && !alertWasteManagement && setAlertWasteManagement) {
+                            setAlertWasteManagement(true);
+                        }
+                    }
+                }, 5000);
+                return () => clearInterval(interval);
+            }, [wasteLevel, id]);
+
+            const handleClick = () => {
+                if (updateWasteBin) {
+                    updateWasteBin(id, 0);
+                    if (setCollectedWaste) setCollectedWaste((collectedWaste || 0) + 50);
+                    if (setAlertWasteManagement) setAlertWasteManagement(false);
+                }
+            };
+
+            const color = wasteLevel > 80 ? '#e74c3c' : wasteLevel > 50 ? '#f39c12' : '#2ecc71';
+            const isNight = timeOfDay === 'night';
+
+            return React.createElement('group', { position, onClick: handleClick },
+                React.createElement('mesh', { castShadow: true },
+                    React.createElement('cylinderGeometry', { args: [0.8, 0.8, 1.5, 16] }),
+                    React.createElement('meshStandardMaterial', { color })
+                ),
+                React.createElement('mesh', { position: [0, 0.75, 0], castShadow: true },
+                    React.createElement('cylinderGeometry', { args: [0.85, 0.85, 0.1, 16] }),
+                    React.createElement('meshStandardMaterial', { color: '#34495e' })
+                ),
+                React.createElement('mesh', { position: [0, 1.55, 0], castShadow: true },
+                    React.createElement('cylinderGeometry', { args: [0.9, 0.9, 0.05, 16] }),
+                    React.createElement('meshStandardMaterial', { color: '#2c3e50' })
+                ),
+                React.createElement(Text, {
+                    position: [0, 2, 0],
+                    fontSize: 0.3,
+                    color,
+                    anchorX: 'center',
+                    anchorY: 'middle'
+                }, Math.round(wasteLevel) + '%'),
+                React.createElement(Text, {
+                    position: [0, 2.5, 0],
+                    fontSize: 0.2,
+                    color: 'white',
+                    anchorX: 'center',
+                    anchorY: 'middle'
+                }, '🗑️ ' + id),
+                isNight && React.createElement('pointLight', {
+                    position: [0, 2, 0],
+                    intensity: 0.3,
+                    color,
+                    distance: 3
+                })
+            );
+        }
+
+        // --- Wheelchair User ---
+        function WheelchairUser({ position = [0, 0, 0], moving = false }) {
+            const groupRef = React.useRef();
+            useFrame((_, delta) => {
+                if (moving && groupRef.current) {
+                    groupRef.current.position.x += Math.sin(Date.now() / 1000) * 0.02;
+                }
+            });
+
+            return React.createElement('group', { ref: groupRef, position },
+                React.createElement('mesh', { position: [0, 0.3, 0], castShadow: true },
+                    React.createElement('boxGeometry', { args: [0.8, 0.2, 0.8] }),
+                    React.createElement('meshStandardMaterial', { color: '#34495e' })
+                ),
+                React.createElement('mesh', { position: [0, 0.6, 0], castShadow: true },
+                    React.createElement('cylinderGeometry', { args: [0.2, 0.2, 0.6, 8] }),
+                    React.createElement('meshStandardMaterial', { color: '#e74c3c' })
+                ),
+                React.createElement('mesh', { position: [0, 1, 0], castShadow: true },
+                    React.createElement('sphereGeometry', { args: [0.15, 8, 8] }),
+                    React.createElement('meshStandardMaterial', { color: '#ffdbac' })
+                ),
+                React.createElement(Text, {
+                    position: [0, 1.3, 0],
+                    fontSize: 0.3,
+                    color: 'white',
+                    anchorX: 'center',
+                    anchorY: 'middle'
+                }, '♿')
+            );
+        }
+
+        // --- Person ---
+        function Person({ position = [0, 0, 0], color = '#8b4513', speed = 0.2, path = null }) {
+            const groupRef = React.useRef();
+            const [pathIndex, setPathIndex] = React.useState(0);
+
+            useFrame((_, delta) => {
+                if (groupRef.current && path && path.length > 1) {
+                    const current = path[pathIndex % path.length];
+                    const next = path[(pathIndex + 1) % path.length];
+                    const dx = next[0] - current[0];
+                    const dz = next[2] - current[2];
+                    const distance = Math.sqrt(dx * dx + dz * dz);
+                    if (distance < 0.01) {
+                        setPathIndex((prev) => (prev + 1) % path.length);
+                        return;
+                    }
+                    const step = speed * delta * 2;
+                    groupRef.current.position.x += (dx / distance) * step;
+                    groupRef.current.position.z += (dz / distance) * step;
+                    if (Math.abs(groupRef.current.position.x - next[0]) < 0.1 &&
+                        Math.abs(groupRef.current.position.z - next[2]) < 0.1) {
+                        setPathIndex((prev) => (prev + 1) % path.length);
+                    }
+                }
+            });
+
+            return React.createElement('group', { ref: groupRef, position },
+                React.createElement('mesh', { position: [0, 0.6, 0], castShadow: true },
+                    React.createElement('cylinderGeometry', { args: [0.2, 0.2, 0.6, 8] }),
+                    React.createElement('meshStandardMaterial', { color })
+                ),
+                React.createElement('mesh', { position: [0, 1.1, 0], castShadow: true },
+                    React.createElement('sphereGeometry', { args: [0.15, 8, 8] }),
+                    React.createElement('meshStandardMaterial', { color: '#ffdbac' })
+                ),
+                React.createElement(Text, {
+                    position: [0, 1.5, 0],
+                    fontSize: 0.2,
+                    color: 'white',
+                    anchorX: 'center',
+                    anchorY: 'middle'
+                }, '👤')
+            );
+        }
+
+        // --- Street Light ---
+        function StreetLight({ position = [0, 0, 0], rotation = [0, 0, 0] }) {
+            const timeOfDay = useStore.get('timeOfDay');
+            const streetLightsOn = useStore.get('streetLightsOn');
+            const isOn = streetLightsOn || timeOfDay === 'night';
+
+            return React.createElement('group', { position, rotation },
+                React.createElement('mesh', { position: [0, 3, 0], castShadow: true },
+                    React.createElement('cylinderGeometry', { args: [0.08, 0.1, 6, 8] }),
+                    React.createElement('meshStandardMaterial', { color: '#666666' })
+                ),
+                React.createElement('mesh', { position: [0, 6, 0.5], castShadow: true },
+                    React.createElement('boxGeometry', { args: [0.4, 0.2, 0.6] }),
+                    React.createElement('meshStandardMaterial', { color: '#444444' })
+                ),
+                React.createElement('mesh', { position: [0, 6, 0.8], castShadow: true },
+                    React.createElement('sphereGeometry', { args: [0.15, 8, 8] }),
+                    React.createElement('meshStandardMaterial', {
+                        color: isOn ? '#ffffcc' : '#666666',
+                        emissive: isOn ? '#ffff99' : '#000000',
+                        emissiveIntensity: isOn ? 1 : 0
+                    })
+                ),
+                isOn && React.createElement('pointLight', {
+                    position: [0, 6, 0.8],
+                    intensity: 0.8,
+                    distance: 15,
+                    color: '#ffffcc',
+                    castShadow: true
+                })
+            );
+        }
+
+        // --- Street Light System ---
+        function StreetLightSystem() {
+            const lightPositions = [
+                ...Array.from({ length: 20 }).map((_, i) => [-50 + i * 5, 0, 0]),
+                ...Array.from({ length: 20 }).map((_, i) => [0, 0, -50 + i * 5]),
+                ...Array.from({ length: 16 }).map((_, i) => [-40 + i * 5, 0, -25]),
+                ...Array.from({ length: 16 }).map((_, i) => [-40 + i * 5, 0, 25]),
+                ...Array.from({ length: 16 }).map((_, i) => [-25, 0, -40 + i * 5]),
+                ...Array.from({ length: 16 }).map((_, i) => [25, 0, -40 + i * 5]),
+                [15, 0, 15],
+                [-15, 0, 15],
+                [0, 0, 0],
+                [-8, 0, -2],
+                [8, 0, -6],
+                [10, 0, 25],
+                [-10, 0, 25],
+                [0, 0, 20],
+                [-30, 0, 15],
+                [30, 0, -15],
+                [-25, 0, 25],
+                [25, 0, -25],
+                [-20, 0, -30],
+                [20, 0, 30],
+                [-10, 0, -25],
+                [10, 0, 25],
+                [-35, 0, -35],
+                [35, 0, 35],
+                [-35, 0, 35],
+                [35, 0, -35],
+                [0, 0, -45],
+                [0, 0, 45],
+                [-45, 0, 0],
+                [45, 0, 0]
+            ];
+
+            return React.createElement('group', null,
+                lightPositions.map((pos, index) =>
+                    React.createElement(StreetLight, { key: index, position: pos })
+                )
+            );
+        }
+
+        // --- Monitoring Drone ---
+        function MonitoringDrone({ position = [0, 0, 0], isMonitoring = false }) {
+            const droneRef = React.useRef();
+            const timeOfDay = useStore.get('timeOfDay');
+
+            useFrame((_, delta) => {
+                if (droneRef.current && isMonitoring) {
+                    droneRef.current.position.x += Math.sin(Date.now() / 2000) * 0.005;
+                    droneRef.current.position.z += Math.cos(Date.now() / 3000) * 0.005;
+                    droneRef.current.position.y += Math.sin(Date.now() / 1500) * 0.002;
+                }
+            });
+
+            const isNight = timeOfDay === 'night';
+
+            return React.createElement('group', { ref: droneRef, position },
+                React.createElement('mesh', { castShadow: true },
+                    React.createElement('boxGeometry', { args: [1, 0.15, 1] }),
+                    React.createElement('meshStandardMaterial', { color: '#333333', metalness: 0.8 })
+                ),
+                React.createElement('mesh', { position: [0, 0.1, 0], castShadow: true },
+                    React.createElement('sphereGeometry', { args: [0.15, 8, 8] }),
+                    React.createElement('meshStandardMaterial', {
+                        color: isMonitoring ? '#e74c3c' : '#2ecc71',
+                        emissive: isMonitoring ? '#e74c3c' : '#2ecc71',
+                        emissiveIntensity: 0.5
+                    })
+                ),
+                [0, 1, 2, 3].map((i) => {
+                    const angle = (i / 4) * Math.PI * 2;
+                    return React.createElement('mesh', {
+                        key: i,
+                        position: [Math.cos(angle) * 0.7, 0.1, Math.sin(angle) * 0.7],
+                        castShadow: true
+                    },
+                        React.createElement('cylinderGeometry', { args: [0.02, 0.02, 0.4, 8] }),
+                        React.createElement('meshStandardMaterial', { color: '#666666' })
+                    );
+                }),
+                React.createElement(Text, {
+                    position: [0, 0.5, 0],
+                    fontSize: 0.2,
+                    color: 'white',
+                    anchorX: 'center',
+                    anchorY: 'middle'
+                }, '🚁'),
+                isNight && React.createElement('pointLight', {
+                    position: [0, 0.2, 0],
+                    intensity: 0.5,
+                    color: '#e74c3c',
+                    distance: 2
+                })
+            );
+        }
+
+        // --- Water Filtering Plant ---
+        function WaterFilteringPlant({ position = [0, 0, 0] }) {
+            const setFocus = useStore.get('setFocus');
+            const waterPlant = useStore.get('waterPlant');
+            const setWaterPlant = useStore.get('setWaterPlant');
+            const timeOfDay = useStore.get('timeOfDay');
+            const [waterParticles, setWaterParticles] = React.useState([]);
+            const [filterActive, setFilterActive] = React.useState(false);
+
+            React.useEffect(() => {
+                const interval = setInterval(() => {
+                    if (setWaterPlant) {
+                        setWaterPlant(prev => {
+                            const shouldProcess = Math.random() > 0.7 && !prev.isProcessing;
+                            const isProcessing = shouldProcess ? true : (prev.isProcessing && prev.processTime < 2);
+                            const newProcessTime = isProcessing ? prev.processTime + 0.5 : 0;
+                            const newFilteredWater = isProcessing ? prev.filteredWater + 10 : prev.filteredWater;
+                            const newWaterQuality = Math.max(80, Math.min(99, prev.waterQuality + (Math
+                            .random() - 0.5) * 5));
+
+                            if (isProcessing && !filterActive) setFilterActive(true);
+                            else if (!isProcessing && filterActive) setFilterActive(false);
+
+                            if (newProcessTime >= 2) {
+                                return {
+                                    isProcessing: false,
+                                    processTime: 0,
+                                    waterQuality: newWaterQuality,
+                                    filteredWater: newFilteredWater,
+                                    efficiency: Math.max(75, Math.min(95, prev.efficiency + (Math.random() - 0.5) *
+                                        3))
+                                };
+                            }
+                            return { ...prev, isProcessing, processTime: newProcessTime, waterQuality: newWaterQuality,
+                                filteredWater: newFilteredWater };
+                        });
+                    }
+                }, 2000);
+                return () => clearInterval(interval);
+            }, [setWaterPlant, filterActive]);
+
+            useFrame((_, dt) => {
+                if (filterActive && Math.random() < 0.3) {
+                    setWaterParticles(prev => [
+                        ...prev.slice(-10), {
+                            id: Math.random(),
+                            position: [Math.random() * 6 - 3, 8, Math.random() * 4 - 2],
+                            progress: 0,
+                            speed: 0.5 + Math.random() * 0.5
+                        }
+                    ]);
+                }
+                setWaterParticles(prev =>
+                    prev.map(p => ({
+                        ...p,
+                        progress: p.progress + dt * p.speed,
+                        position: [p.position[0], p.position[1] - dt * 2, p.position[2]]
+                    })).filter(p => p.progress < 3)
+                );
+            });
+
+            const wp = waterPlant || { isProcessing: false, processTime: 0, waterQuality: 95, filteredWater: 0,
+                efficiency: 85 };
+            const isNight = timeOfDay === 'night';
+
+            return React.createElement('group', { position },
+                // Main Building
+                React.createElement('mesh', {
+                    castShadow: true,
+                    receiveShadow: true,
+                    onClick: () => setFocus && setFocus({ x: position[0], y: 8, z: position[2], lookAt: { x: position[
+                            0], y: 0, z: position[2] } })
+                },
+                    React.createElement('boxGeometry', { args: [12, 6, 8] }),
+                    React.createElement('meshStandardMaterial', { color: '#3498db', roughness: 0.6 })
+                ),
+                // Windows
+                Array.from({ length: 3 }).map((_, floor) =>
+                    Array.from({ length: 4 }).map((_, window) =>
+                        React.createElement('mesh', {
+                            key: `${floor}-${window}`,
+                            position: [-5, -2 + floor * 2, -3.9 + window * 2],
+                            castShadow: true
+                        },
+                            React.createElement('boxGeometry', { args: [0.1, 1.2, 1.5] }),
+                            React.createElement('meshStandardMaterial', {
+                                color: isNight ? '#ffffcc' : '#87CEEB',
+                                transparent: true,
+                                opacity: isNight ? 0.9 : 0.7,
+                                emissive: isNight ? '#ffff99' : '#000000',
+                                emissiveIntensity: isNight ? 0.5 : 0
+                            })
+                        )
+                    )
+                ),
+                // Roof
+                React.createElement('mesh', { position: [0, 3.5, 0], castShadow: true },
+                    React.createElement('boxGeometry', { args: [12.2, 0.3, 8.2] }),
+                    React.createElement('meshStandardMaterial', { color: '#2c3e50' })
+                ),
+                // Filter Tanks
+                React.createElement('group', null,
+                    [{
+                        pos: [-3, 0, -2],
+                        label: 'INTAKE',
+                        level: 0.8
+                    }, { pos: [0, 0, 0], label: 'FILTER', level: 0.6 }, { pos: [3, 0, 2], label: 'CLEAN',
+                        level: 0.9 }].map((tank, i) =>
+                        React.createElement('group', { key: i, position: tank.pos },
+                            React.createElement('mesh', { castShadow: true },
+                                React.createElement('cylinderGeometry', { args: [1, 1, 3, 16] }),
+                                React.createElement('meshStandardMaterial', { color: '#34495e', transparent: true,
+                                    opacity: 0.8 })
+                            ),
+                            React.createElement('mesh', { position: [0, (tank.level * 2.8) - 1.4, 0],
+                                    castShadow: true },
+                                React.createElement('cylinderGeometry', { args: [0.95, 0.95, tank.level * 2.7,
+                                        16] }),
+                                React.createElement('meshStandardMaterial', {
+                                    color: wp.isProcessing ? '#3498db' : '#2980b9',
+                                    transparent: true,
+                                    opacity: 0.7,
+                                    emissive: wp.isProcessing ? '#3498db' : '#2980b9',
+                                    emissiveIntensity: 0.2
+                                })
+                            ),
+                            React.createElement('mesh', { position: [0, 1.6, 0], castShadow: true },
+                                React.createElement('cylinderGeometry', { args: [1.05, 1.05, 0.1, 16] }),
+                                React.createElement('meshStandardMaterial', { color: '#2c3e50' })
+                            ),
+                            React.createElement(Text, { position: [0, 2, 0], fontSize: 0.2, color: 'white',
+                                anchorX: 'center', anchorY: 'middle' }, tank.label),
+                            wp.isProcessing && React.createElement('pointLight', {
+                                position: [0, 1, 0],
+                                color: '#3498db',
+                                intensity: 0.5,
+                                distance: 3
+                            })
+                        )
+                    )
+                ),
+                // Label
+                React.createElement(Text, { position: [0, 4, 0], fontSize: 0.4, color: '#3498db', anchorX: 'center',
+                    anchorY: 'middle' }, '💧 Water Plant'),
+                // Info Panel
+                React.createElement(Html, { position: [0, 8, 0], transform: true },
+                    React.createElement('div', {
+                        style: {
+                            background: 'rgba(52, 152, 219, 0.95)',
+                            padding: '15px',
+                            borderRadius: '12px',
+                            boxShadow: '0 8px 25px rgba(0,0,0,0.3)',
+                            minWidth: '300px',
+                            textAlign: 'center',
+                            color: 'white',
+                            border: '2px solid #2980b9'
+                        }
+                    },
+                        React.createElement('h3', { style: { margin: '0 0 12px 0', color: 'white' } },
+                        '💧 Advanced Water Filtering Plant'),
+                        React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr',
+                                gap: '10px', marginBottom: '12px' } },
+                            React.createElement('div', { style: { textAlign: 'left' } },
+                                React.createElement('div', null, '🔧 Status: ', React.createElement('strong', null, wp
+                                    .isProcessing ? 'PROCESSING' : 'STANDBY')),
+                                React.createElement('div', null, '💧 Quality: ', React.createElement('strong', null,
+                                    Math.round(wp.waterQuality) + '%')),
+                                React.createElement('div', null, '📈 Efficiency: ', React.createElement('strong',
+                                    null, Math.round(wp.efficiency) + '%'))
+                            ),
+                            React.createElement('div', { style: { textAlign: 'left' } },
+                                React.createElement('div', null, '⏱️ Process: ', React.createElement('strong', null,
+                                    Math.min(2, wp.processTime).toFixed(1) + '/2s')),
+                                React.createElement('div', null, '💦 Filtered: ', React.createElement('strong', null,
+                                    wp.filteredWater + 'L'))
+                            )
+                        ),
+                        wp.isProcessing && React.createElement('div', { style: { background: 'rgba(255,255,255,0.2)',
+                                padding: '8px', borderRadius: '6px', marginBottom: '10px' } },
+                            React.createElement('div', { style: { fontWeight: 'bold', color: '#00ff00' } },
+                                '🔄 FILTERING WATER... ' + Math.round((wp.processTime / 2) * 100) + '%'
+                            )
+                        )
+                    )
+                )
+            );
+        }
+
+        // --- City Layout ---
+        function CityLayout() {
+            return React.createElement('group', null,
+                // Buildings - North-West District
+                React.createElement('group', { position: [-25, 0, 25] },
+                    React.createElement(EnhancedBuilding, { position: [-15, 0, 15], height: 8, color: '#4a6572',
+                        name: 'Residence A', hasTurbine: true }),
+                    React.createElement(EnhancedBuilding, { position: [-5, 0, 15], height: 12, color: '#556b78',
+                        name: 'Business Tower', hasTurbine: false }),
+                    React.createElement(EnhancedBuilding, { position: [5, 0, 15], height: 10, color: '#5d7887',
+                        name: 'Residence B', hasTurbine: true }),
+                    React.createElement(EnhancedBuilding, { position: [15, 0, 15], height: 14, color: '#34495e',
+                        name: 'Corporate', hasTurbine: true }),
+                    React.createElement(EnhancedBuilding, { position: [-15, 0, 5], height: 11, color: '#4a6572',
+                        name: 'Tech Hub', hasTurbine: false }),
+                    React.createElement(EnhancedBuilding, { position: [-5, 0, 5], height: 16, color: '#556b78',
+                        name: 'Sky Tower', hasTurbine: true }),
+                    React.createElement(EnhancedBuilding, { position: [5, 0, 5], height: 9, color: '#5d7887',
+                        name: 'Elite', hasTurbine: true }),
+                    React.createElement(EnhancedBuilding, { position: [15, 0, 5], height: 13, color: '#34495e',
+                        name: 'Finance', hasTurbine: false }),
+                    React.createElement(EnhancedBuilding, { position: [-15, 0, -5], height: 15, color: '#4a6572',
+                        name: 'Innovation', hasTurbine: true }),
+                    React.createElement(EnhancedBuilding, { position: [-5, 0, -5], height: 8, color: '#556b78',
+                        name: 'Garden', hasTurbine: true }),
+                    React.createElement(EnhancedBuilding, { position: [5, 0, -5], height: 12, color: '#5d7887',
+                        name: 'Plaza', hasTurbine: false }),
+                    React.createElement(EnhancedBuilding, { position: [15, 0, -5], height: 10, color: '#34495e',
+                        name: 'Luxury', hasTurbine: true }),
+                    React.createElement(EnhancedBuilding, { position: [-15, 0, -15], height: 9, color: '#4a6572',
+                        name: 'Urban', hasTurbine: true }),
+                    React.createElement(EnhancedBuilding, { position: [-5, 0, -15], height: 14, color: '#556b78',
+                        name: 'Commerce', hasTurbine: false }),
+                    React.createElement(EnhancedBuilding, { position: [5, 0, -15], height: 11, color: '#5d7887',
+                        name: 'Suites', hasTurbine: true }),
+                    React.createElement(EnhancedBuilding, { position: [15, 0, -15], height: 17, color: '#34495e',
+                        name: 'Signature', hasTurbine: true })
+                ),
+                // Hospital
+                React.createElement(ModernHospital, { position: [40, 0, 25] }),
+                // School
+                React.createElement(BeachonhouseSchoolSystem, { position: [40, 0, -5] }),
+                // Cultural Center
+                React.createElement(CulturalCenter, { position: [25, 0, 40] }),
+                // Water Plant
+                React.createElement(WaterFilteringPlant, { position: [-35, 0, -25] }),
+                // Waste Management
+                React.createElement(WasteManagementSystem, { position: [-35, 0, -40] }),
+                // Data Center
+                React.createElement(DataCenter, { position: [-40, 0, -10] }),
+                // Vertical Garden
+                React.createElement(VerticalGardenBuilding, { position: [25, 0, -35] }),
+                // Energy Society
+                React.createElement(EnergyEfficientSociety, { position: [0, 0, -45] }),
+                // Bus Station
+                React.createElement(BusStation, { position: [0, 0, 0] }),
+                // Waste Monitoring
+                React.createElement(WasteMonitoringSystem, { position: [0, 0, 10] }),
+                // Waste Bins
+                React.createElement(WasteBin, { position: [-15, 0, 10], id: 'bin1' }),
+                React.createElement(WasteBin, { position: [20, 0, -8], id: 'bin2' }),
+                React.createElement(WasteBin, { position: [-8, 0, -18], id: 'bin3' }),
+                React.createElement(WasteBin, { position: [25, 0, 15], id: 'bin4' }),
+                React.createElement(WasteBin, { position: [-20, 0, -25], id: 'bin5' }),
+                React.createElement(WasteBin, { position: [10, 0, 25], id: 'bin6' }),
+                // Drones
+                React.createElement(MonitoringDrone, { position: [30, 15, 20], isMonitoring: true }),
+                React.createElement(MonitoringDrone, { position: [-25, 12, -25], isMonitoring: true }),
+                React.createElement(MonitoringDrone, { position: [15, 18, -30], isMonitoring: true }),
+                // People
+                React.createElement(Person, { position: [5, 0, 22], color: '#8b4513', speed: 0.3, path: [
+                        [5, 0.8, 22],
+                        [3, 0.8, 24],
+                        [1, 0.8, 22],
+                        [3, 0.8, 20],
+                        [5, 0.8, 22]
+                    ] }),
+                React.createElement(Person, { position: [-3, 0, 27], color: '#2c3e50', speed: 0.4, path: [
+                        [-3, 0.8, 27],
+                        [-5, 0.8, 25],
+                        [-7, 0.8, 27],
+                        [-5, 0.8, 29],
+                        [-3, 0.8, 27]
+                    ] }),
+                React.createElement(WheelchairUser, { position: [35, 0, 15], moving: true }),
+                React.createElement(WheelchairUser, { position: [-35, 0, -5], moving: true })
+            );
+        }
+
+        // --- Placeholder components (to be defined) ---
+        function ModernHospital({ position }) {
+            return React.createElement('group', { position },
+                React.createElement('mesh', { castShadow: true, receiveShadow: true },
+                    React.createElement('boxGeometry', { args: [25, 15, 20] }),
+                    React.createElement('meshStandardMaterial', { color: '#ffffff', roughness: 0.2, metalness: 0.3 })
+                ),
+                React.createElement(Text, { position: [0, 12, 0], fontSize: 0.6, color: '#e74c3c', anchorX: 'center',
+                    anchorY: 'middle' }, '🏥 Hospital'),
+                React.createElement('mesh', { position: [0, 8.5, 10.1], castShadow: true },
+                    React.createElement('boxGeometry', { args: [6, 1, 0.1] }),
+                    React.createElement('meshStandardMaterial', { color: '#e74c3c' })
+                ),
+                React.createElement('mesh', { position: [0, 8.5, 10.1], castShadow: true, rotation: [0, 0, Math.PI /
+                        2] },
+                    React.createElement('boxGeometry', { args: [6, 1, 0.1] }),
+                    React.createElement('meshStandardMaterial', { color: '#e74c3c' })
+                ),
+                React.createElement(WheelchairUser, { position: [3, 0, 5], moving: true })
+            );
+        }
+
+        function BeachonhouseSchoolSystem({ position }) {
+            const timeOfDay = useStore.get('timeOfDay');
+            const isNight = timeOfDay === 'night';
+
+            return React.createElement('group', { position },
+                React.createElement('mesh', { castShadow: true, receiveShadow: true },
+                    React.createElement('boxGeometry', { args: [22, 10, 15] }),
+                    React.createElement('meshStandardMaterial', { color: '#e6f7ff', transparent: true, opacity: 0.4,
+                        roughness: 0.1, metalness: 0.8 })
+                ),
+                [-8, -4, 0, 4, 8].map((x) =>
+                    React.createElement('mesh', { key: x, position: [x, 0, 0], castShadow: true },
+                        React.createElement('boxGeometry', { args: [0.3, 10, 15.2] }),
+                        React.createElement('meshStandardMaterial', { color: '#34495e', metalness: 0.6 })
+                    )
+                ),
+                React.createElement(Text, { position: [0, 6, 0], fontSize: 0.6, color: '#3498db', anchorX: 'center',
+                    anchorY: 'middle' }, '🏫 School'),
+                React.createElement(WheelchairUser, { position: [-6, 0, 5], moving: true })
+            );
+        }
+
+        function CulturalCenter({ position }) {
+            return React.createElement('group', { position },
+                React.createElement('mesh', { castShadow: true, receiveShadow: true },
+                    React.createElement('boxGeometry', { args: [15, 8, 12] }),
+                    React.createElement('meshStandardMaterial', { color: '#8b4513', roughness: 0.6, metalness: 0.2 })
+                ),
+                React.createElement(Text, { position: [0, 5, 0], fontSize: 0.6, color: '#d4af37', anchorX: 'center',
+                    anchorY: 'middle' }, '🎪 Cultural Center')
+            );
+        }
+
+        function WasteManagementSystem({ position }) {
+            return React.createElement('group', { position },
+                React.createElement('mesh', { castShadow: true, receiveShadow: true },
+                    React.createElement('boxGeometry', { args: [8, 4, 6] }),
+                    React.createElement('meshStandardMaterial', { color: '#27ae60' })
+                ),
+                React.createElement(Text, { position: [0, 2.8, 0], fontSize: 0.35, color: 'white', anchorX: 'center',
+                    anchorY: 'middle' }, '♻️ Waste Management')
+            );
+        }
+
+        function DataCenter({ position }) {
+            const timeOfDay = useStore.get('timeOfDay');
+            const isNight = timeOfDay === 'night';
+
+            return React.createElement('group', { position },
+                React.createElement('mesh', { castShadow: true, receiveShadow: true },
+                    React.createElement('boxGeometry', { args: [10, 5, 8] }),
+                    React.createElement('meshStandardMaterial', { color: '#2c3e50' })
+                ),
+                Array.from({ length: 6 }).map((_, i) =>
+                    React.createElement('mesh', { key: i, position: [-4 + i * 1.6, -2.4, 0], castShadow: true },
+                        React.createElement('boxGeometry', { args: [1, 0.5, 4] }),
+                        React.createElement('meshStandardMaterial', { color: '#1a1a2e', metalness: 0.6 })
+                    )
+                ),
+                Array.from({ length: 6 }).map((_, i) =>
+                    React.createElement('mesh', { key: i, position: [-4 + i * 1.6, -2.7, 1.5], castShadow: true },
+                        React.createElement('boxGeometry', { args: [0.8, 0.1, 0.1] }),
+                        React.createElement('meshStandardMaterial', {
+                            color: '#00ff00',
+                            emissive: '#00ff00',
+                            emissiveIntensity: Math.random() > 0.8 ? 1 : 0.2
+                        })
+                    )
+                ),
+                React.createElement(Text, { position: [0, 3, 0], fontSize: 0.4, color: '#00ff00', anchorX: 'center',
+                    anchorY: 'middle' }, '🖥️ Data Center')
+            );
+        }
+
+        function VerticalGardenBuilding({ position }) {
+            const timeOfDay = useStore.get('timeOfDay');
+            const isNight = timeOfDay === 'night';
+
+            return React.createElement('group', { position },
+                React.createElement('mesh', { castShadow: true, receiveShadow: true },
+                    React.createElement('boxGeometry', { args: [8, 20, 8] }),
+                    React.createElement('meshStandardMaterial', { color: '#8b4513', roughness: 0.7 })
+                ),
+                // Garden floors
+                [0, 1, 2, 3].map((side) => {
+                    const angle = (side / 4) * Math.PI * 2;
+                    const offsetX = Math.cos(angle) * 4.1;
+                    const offsetZ = Math.sin(angle) * 4.1;
+                    const rotationY = angle + Math.PI;
+
+                    return React.createElement('group', { key: side, position: [offsetX, 0, offsetZ], rotation: [0,
+                            rotationY, 0
+                        ] },
+                        React.createElement('mesh', { castShadow: true, receiveShadow: true },
+                            React.createElement('boxGeometry', { args: [0.2, 18, 7.8] }),
+                            React.createElement('meshStandardMaterial', { color: '#27ae60' })
+                        ),
+                        Array.from({ length: 6 }).map((_, level) =>
+                            React.createElement('group', { key: level, position: [0.11, -7 + level * 3, 0] },
+                                React.createElement('mesh', { castShadow: true },
+                                    React.createElement('boxGeometry', { args: [0.1, 0.1, 7.6] }),
+                                    React.createElement('meshStandardMaterial', { color: '#8b4513' })
+                                ),
+                                Array.from({ length: 8 }).map((_, plantIndex) => {
+                                    const plantX = -3.5 + plantIndex * 1;
+                                    const colors = ['#ffd700', '#ff4444', '#ff6b6b', '#ff8c00', '#90ee90',
+                                        '#ff69b4', '#ff0000', '#9370db'
+                                    ];
+                                    return React.createElement('group', { key: plantIndex, position: [0, 0.2,
+                                            plantX
+                                        ] },
+                                        React.createElement('mesh', { castShadow: true },
+                                            React.createElement('cylinderGeometry', { args: [0.05,
+                                                    0.05, 0.5, 8
+                                                ] }),
+                                            React.createElement('meshStandardMaterial', { color: '#228b22' })
+                                        ),
+                                        React.createElement('mesh', { position: [0, 0.35, 0], castShadow: true },
+                                            React.createElement('sphereGeometry', { args: [0.15, 8, 8] }),
+                                            React.createElement('meshStandardMaterial', { color: colors[
+                                                    plantIndex % colors.length] })
+                                        )
+                                    );
+                                })
+                            )
+                        )
+                    );
+                }),
+                React.createElement(Text, { position: [0, 11, 0], fontSize: 0.5, color: '#27ae60', anchorX: 'center',
+                    anchorY: 'middle' }, '🌿 Vertical Garden')
+            );
+        }
+
+        function EnergyEfficientSociety({ position }) {
+            const timeOfDay = useStore.get('timeOfDay');
+            const isNight = timeOfDay === 'night';
+
+            return React.createElement('group', { position },
+                React.createElement('mesh', { castShadow: true, receiveShadow: true },
+                    React.createElement('boxGeometry', { args: [12, 6, 10] }),
+                    React.createElement('meshStandardMaterial', { color: '#3498db' })
+                ),
+                React.createElement(SolarPanel, { position: [4, 3.5, 3], rotation: [0, Math.PI / 4, 0] }),
+                React.createElement(SolarPanel, { position: [-4, 3.5, 3], rotation: [0, -Math.PI / 4, 0] }),
+                React.createElement(SolarPanel, { position: [4, 3.5, -3], rotation: [0, 3 * Math.PI / 4, 0] }),
+                React.createElement(SolarPanel, { position: [-4, 3.5, -3], rotation: [0, -3 * Math.PI / 4, 0] }),
+                React.createElement(WindTurbine, { position: [5, 0, 0] }),
+                React.createElement(Text, { position: [0, 4.5, 0], fontSize: 0.4, color: '#ecf0f1', anchorX: 'center',
+                    anchorY: 'middle' }, '⚡ Energy Society')
+            );
+        }
+
+        function BusStation({ position }) {
+            const timeOfDay = useStore.get('timeOfDay');
+            const isNight = timeOfDay === 'night';
+
+            return React.createElement('group', { position },
+                React.createElement('mesh', { castShadow: true, receiveShadow: true },
+                    React.createElement('boxGeometry', { args: [8, 2, 3] }),
+                    React.createElement('meshStandardMaterial', { color: '#2c3e50' })
+                ),
+                React.createElement('mesh', { position: [0, 1.2, 0], castShadow: true },
+                    React.createElement('boxGeometry', { args: [4, 0.1, 2.8] }),
+                    React.createElement('meshStandardMaterial', { color: '#34495e' })
+                ),
+                React.createElement(Text, { position: [0, 2, 0], fontSize: 0.3, color: 'white', anchorX: 'center',
+                    anchorY: 'middle' }, '🚌 Bus Station')
+            );
+        }
+
+        function WasteMonitoringSystem({ position }) {
+            const alertWasteManagement = useStore.get('alertWasteManagement');
+            const collectedWaste = useStore.get('collectedWaste');
+            const timeOfDay = useStore.get('timeOfDay');
+            const isNight = timeOfDay === 'night';
+
+            return React.createElement('group', { position },
+                React.createElement('mesh', { castShadow: true, receiveShadow: true },
+                    React.createElement('boxGeometry', { args: [3, 2, 3] }),
+                    React.createElement('meshStandardMaterial', { color: '#2c3e50' })
+                ),
+                [0, 1, 2].map((i) =>
+                    React.createElement('mesh', { key: i, position: [-1 + i, 0.8, 1.61], castShadow: true },
+                        React.createElement('planeGeometry', { args: [0.6, 0.4] }),
+                        React.createElement('meshStandardMaterial', {
+                            color: alertWasteManagement ? '#e74c3c' : '#2ecc71',
+                            emissive: alertWasteManagement ? '#e74c3c' : '#2ecc71',
+                            emissiveIntensity: 0.5
+                        })
+                    )
+                ),
+                React.createElement(Text, { position: [0, 1.8, 0], fontSize: 0.25, color: 'white', anchorX: 'center',
+                    anchorY: 'middle' }, '📊 Waste Monitor'),
+                React.createElement(Text, { position: [0, 2.3, 0], fontSize: 0.2, color: '#3498db', anchorX: 'center',
+                    anchorY: 'middle' }, alertWasteManagement ? '⚠️ High Waste!' : '✅ System Normal')
+            );
+        }
+
+        // ============================================
+        // MAIN APP
+        // ============================================
+
+        function App() {
+            const controlsRef = React.useRef();
+            const focus = useStore.get('focus');
+
+            // Set up store with functions
+            React.useEffect(() => {
+                useStore.setState({
+                    setFocus: (f) => useStore.setState({ focus: f }),
+                    setAlertWasteManagement: (alert) => useStore.setState({ alertWasteManagement: alert }),
+                    setCollectedWaste: (fn) => {
+                        const current = useStore.getState().collectedWaste || 0;
+                        const newVal = typeof fn === 'function' ? fn(current) : fn;
+                        useStore.setState({ collectedWaste: newVal });
+                    },
+                    updateWasteBin: (id, level) => {
+                        const bins = useStore.getState().wasteBins || {};
+                        useStore.setState({ wasteBins: { ...bins, [id]: level } });
+                    },
+                    setWaterPlant: (fn) => {
+                        const current = useStore.getState().waterPlant || { isProcessing: false, processTime: 0,
+                            waterQuality: 95, filteredWater: 0, efficiency: 85 };
+                        const newVal = typeof fn === 'function' ? fn(current) : fn;
+                        useStore.setState({ waterPlant: newVal });
+                    }
+                });
+
+                // Set initial waste bins
+                const bins = {};
+                ['bin1', 'bin2', 'bin3', 'bin4', 'bin5', 'bin6'].forEach(id => {
+                    bins[id] = 20 + Math.random() * 40;
+                });
+                useStore.setState({ wasteBins: bins });
+
+                // Loading complete
+                const fill = document.getElementById('loadingFill');
+                if (fill) {
+                    let progress = 0;
+                    const interval = setInterval(() => {
+                        progress += 10;
+                        fill.style.width = progress + '%';
+                        if (progress >= 100) {
+                            clearInterval(interval);
+                            setTimeout(() => {
+                                document.getElementById('loading').style.display = 'none';
+                            }, 300);
+                        }
+                    }, 100);
+                } else {
+                    setTimeout(() => {
+                        document.getElementById('loading').style.display = 'none';
+                    }, 1000);
+                }
+            }, []);
+
+            React.useEffect(() => {
+                if (focus && controlsRef.current) {
+                    const { x, y, z, lookAt } = focus;
+                    controlsRef.current.target.set(lookAt.x, lookAt.y, lookAt.z);
+                    controlsRef.current.object.position.set(x, y, z);
+                }
+            }, [focus]);
+
+            return React.createElement('div', { style: { width: '100vw', height: '100vh', background: '#0a0a1a' } },
+                React.createElement(Canvas, {
+                    shadows: true,
+                    camera: { position: [50, 40, 50], fov: 60 },
+                    style: { background: 'linear-gradient(180deg, #0a0a1a 0%, #1a1a3e 100%)' }
+                },
+                    React.createElement(Sky, { sunPosition: [100, 20, 100] }),
+                    React.createElement('ambientLight', { intensity: 0.5, color: '#4466aa' }),
+                    React.createElement('directionalLight', {
+                        position: [50, 50, 50],
+                        intensity: 1,
+                        castShadow: true,
+                        'shadow-mapSize-width': 2048,
+                        'shadow-mapSize-height': 2048
+                    }),
+                    React.createElement(CityLayout, null),
+                    React.createElement(StreetLightSystem, null),
+                    React.createElement(ContactShadows, { position: [0, -0.5, 0], opacity: 0.6, scale: 100, blur: 2 }),
+                    React.createElement(OrbitControls, {
+                        ref: controlsRef,
+                        enableDamping: true,
+                        dampingFactor: 0.05,
+                        minDistance: 10,
+                        maxDistance: 150,
+                        maxPolarAngle: Math.PI / 2.2,
+                        target: [0, 0, 0]
+                    })
+                )
+            );
+        }
+
+        // ============================================
+        // RENDER
+        // ============================================
+
+        const rootElement = document.getElementById('root');
+        if (rootElement) {
+            ReactDOM.createRoot(rootElement).render(React.createElement(App));
+        } else {
+            console.error('Root element not found');
+        }
+    </script>
+</body>
 </html>
